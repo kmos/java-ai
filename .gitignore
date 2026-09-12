@@ -37,6 +37,7 @@ Thumbs.db
 # Java
 *.class
 *.jar
+!rag/image-server/*.jar
 *.war
 *.ear
 hs_err_pid*
