@@ -24,6 +24,9 @@ public class MilvusStore {
     @ConfigProperty(name = "milvus.collection.name")
     String milvusCollectionName;
 
+    @ConfigProperty(name = "milvus.collection.floatVector.dim")
+    Integer dimension;
+
     private MilvusClientV2 client;
 
     @PostConstruct
@@ -62,7 +65,7 @@ public class MilvusStore {
         final var vectorField = CreateCollectionReq.FieldSchema.builder()
                 .name("vector")
                 .dataType(DataType.FloatVector)
-                .dimension(768)
+                .dimension(dimension)
                 .build();
         final var collectionSchema = CollectionSchema.builder()
                 .fieldSchemaList(List.of(pkField, titleField, contentsField, vectorField))
