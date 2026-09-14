@@ -3,10 +3,12 @@ package io.mosfet.rag.cli;
 import java.util.function.Supplier;
 
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.rag.AugmentationRequest;
 import dev.langchain4j.rag.AugmentationResult;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
 import io.quarkiverse.langchain4j.ModelName;
@@ -24,9 +26,17 @@ public class MilvusRetrievalAugmentor implements Supplier<RetrievalAugmentor> {
                 .embeddingStore(store)
                 .maxResults(3)
                 .build();
+        var contentInjector = DefaultContentInjector.builder()
+                .promptTemplate(PromptTemplate.from("""
+                        Context:
+                        {{contents}}
+
+                        Question: {{userMessage}}"""))
+                .build();
         augmentor = new RetrievalAugmentorDecorator(DefaultRetrievalAugmentor
                 .builder()
                 .contentRetriever(contentRetriever)
+                .contentInjector(contentInjector)
                 .build());
     }
 
@@ -45,9 +55,10 @@ public class MilvusRetrievalAugmentor implements Supplier<RetrievalAugmentor> {
 
         @Override
         public AugmentationResult augment(AugmentationRequest augmentationRequest) {
-            Log.infof("Requested augmentation of %s", augmentationRequest.chatMessage());
+            Log.debugf("Requested augmentation of %s", augmentationRequest.chatMessage());
             final var result = delegate.augment(augmentationRequest);
-            Log.infof("Result of augmentation is %s", result.contents());
+            Log.debugf("Augmentation retrieved %d contents", result.contents().size());
+            Log.debugf("Augmented message: %s", result.chatMessage());
             return result;
         }
     }

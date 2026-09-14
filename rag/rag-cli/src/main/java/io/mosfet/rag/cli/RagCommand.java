@@ -1,20 +1,18 @@
 package io.mosfet.rag.cli;
 
+import java.util.Scanner;
+
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
+import io.quarkiverse.langchain4j.ModelName;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Parameters;
 
 @Command(name = "RagCommand", mixinStandardHelpOptions = true)
 public class RagCommand implements Runnable {
-
-    @Parameters(index = "0", paramLabel = "<operation>", description = "Operation to perform: init, query-chat, list-milvus, insert-document, delete-document", arity = "1")
-    private String operation;
-
-    @Parameters(index = "1", paramLabel = "<param>", description = "Command parameter (required if operation is 'query-chat', 'insert-document' or 'delete-document')", arity = "0..*")
-    private String[] queryParam;
 
     @Inject
     Chat chat;
@@ -25,73 +23,115 @@ public class RagCommand implements Runnable {
     @Inject
     DocumentDatabase documentDatabase;
 
+    @Inject
+    MilvusEmbeddingStore milvusEmbeddingStore;
+
+    @Inject
+    @ModelName("granite")
+    EmbeddingModel embeddingModel;
+
     @Override
     public void run() {
-        try {
-            switch (operation.toLowerCase()) {
-            case "init":
-                handleInit();
-                break;
-            case "query-chat":
-                handleQuery();
-                break;
-            case "list-milvus":
-                embeddingStore.list();
-                break;
-            case "delete-document":
-                handleDocumentDelete();
-                break;
-            case "insert-document":
-                handleDocumentInsert();
-                break;
-            default:
-                Log.errorf("Invalid operation '%s'", operation);
-                CommandLine.usage(this, System.err);
-                System.exit(1);
+        System.out.println("RAG CLI - type a question to chat, or use a /command");
+        System.out.println("Commands: /init, /list-milvus, /insert-document <id>, /delete-document <id>, /search <query>, /exit");
+        System.out.println();
+
+        try (var scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("> ");
+                if (!scanner.hasNextLine()) {
+                    break;
+                }
+                var line = scanner.nextLine().trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    if (line.startsWith("/")) {
+                        if (!handleCommand(line)) {
+                            break;
+                        }
+                    } else {
+                        handleQuery(line);
+                    }
+                } catch (Exception e) {
+                    Log.errorf("Error: %s", e.getMessage());
+                }
             }
         }
-        catch (Exception e) {
-            Log.errorf("Error during operation '%s'", operation, e);
-            System.exit(1);
+    }
+
+    private boolean handleCommand(String line) throws Exception {
+        var parts = line.split("\\s+", 2);
+        var command = parts[0].toLowerCase();
+        var arg = parts.length > 1 ? parts[1].trim() : null;
+
+        switch (command) {
+            case "/exit":
+                return false;
+            case "/init":
+                embeddingStore.init();
+                documentDatabase.init();
+                break;
+            case "/list-milvus":
+                embeddingStore.list();
+                break;
+            case "/insert-document":
+                if (arg == null || arg.isEmpty()) {
+                    System.err.println("Usage: /insert-document <arXiv-id>");
+                    break;
+                }
+                documentDatabase.insert(arg);
+                break;
+            case "/delete-document":
+                if (arg == null || arg.isEmpty()) {
+                    System.err.println("Usage: /delete-document <arXiv-id>");
+                    break;
+                }
+                documentDatabase.delete(arg);
+                break;
+            case "/search":
+                if (arg == null || arg.isEmpty()) {
+                    System.err.println("Usage: /search <query>");
+                    break;
+                }
+                handleSearch(arg);
+                break;
+            default:
+                System.err.println("Unknown command: " + command);
+                System.err.println("Commands: /init, /list-milvus, /insert-document <id>, /delete-document <id>, /search <query>, /exit");
+                break;
         }
+        return true;
     }
-
-    private void handleInit() throws Exception {
-        embeddingStore.init();
-        documentDatabase.init();
-    }
-
 
     @ActivateRequestContext
-    void handleQuery() {
-        if (queryParam == null || queryParam.length == 0) {
-            System.err.println("Error: At least one query argument required for 'query' operation.");
-            CommandLine.usage(this, System.err);
-            System.exit(1);
-            return;
-        }
-        final var query = String.join(" ", queryParam);
+    void handleQuery(String query) {
         Log.infof("Sending query: %s", query);
-        final var reply = chat.chat(query);
-        Log.infof("Chat reply: %s", reply);
+        var reply = chat.chat(query);
+        System.out.println(reply);
     }
 
-    void handleDocumentInsert() throws Exception {
-        if (queryParam == null || queryParam.length != 1) {
-            System.err.println("Error: One ArXiv document id required.");
-            CommandLine.usage(this, System.err);
-            System.exit(1);
-            return;
-        }
-        documentDatabase.insert(queryParam[0]);
-    }
+    void handleSearch(String query) {
+        System.out.println("Embedding query...");
+        var embedding = embeddingModel.embed(query).content();
+        System.out.printf("Embedding dimension: %d%n", embedding.dimension());
 
-    void handleDocumentDelete() throws Exception {
-        if (queryParam == null || queryParam.length != 1) {
-            System.err.println("Error: One ArXiv document id required.");
-            CommandLine.usage(this, System.err);
-            System.exit(1);
-            return;
+        System.out.println("Searching Milvus...");
+        var searchRequest = EmbeddingSearchRequest.builder()
+                .queryEmbedding(embedding)
+                .maxResults(3)
+                .minScore(0.0)
+                .build();
+        var results = milvusEmbeddingStore.search(searchRequest);
+
+        System.out.printf("Found %d results:%n", results.matches().size());
+        for (var match : results.matches()) {
+            System.out.printf("  score=%.4f id=%s text=%s%n",
+                    match.score(),
+                    match.embeddingId(),
+                    match.embedded() != null ? match.embedded().text().substring(0, Math.min(100, match.embedded().text().length())) + "..." : "NULL");
         }
-        documentDatabase.delete(queryParam[0]);
-    }}
+    }
+}
