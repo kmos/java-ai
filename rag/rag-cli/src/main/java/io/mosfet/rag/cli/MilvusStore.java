@@ -61,6 +61,7 @@ public class MilvusStore {
         final var contentsField = CreateCollectionReq.FieldSchema.builder()
                 .name("text")
                 .dataType(DataType.VarChar)
+                .maxLength(4096)
                 .build();
         final var vectorField = CreateCollectionReq.FieldSchema.builder()
                 .name("vector")

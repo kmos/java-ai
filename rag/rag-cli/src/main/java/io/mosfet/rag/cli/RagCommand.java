@@ -33,7 +33,7 @@ public class RagCommand implements Runnable {
     @Override
     public void run() {
         System.out.println("RAG CLI - type a question to chat, or use a /command");
-        System.out.println("Commands: /init, /list-milvus, /insert-document <id>, /delete-document <id>, /search <query>, /exit");
+        System.out.println("Commands: /init, /list-milvus, /list-document, /insert-document <paper-id>, /delete-document <paper-id>, /search <query>, /exit");
         System.out.println();
 
         try (var scanner = new Scanner(System.in)) {
@@ -77,6 +77,9 @@ public class RagCommand implements Runnable {
             case "/list-milvus":
                 embeddingStore.list();
                 break;
+            case "/list-document":
+                documentDatabase.listPapers();
+                break;
             case "/insert-document":
                 if (arg == null || arg.isEmpty()) {
                     System.err.println("Usage: /insert-document <arXiv-id>");
@@ -100,7 +103,7 @@ public class RagCommand implements Runnable {
                 break;
             default:
                 System.err.println("Unknown command: " + command);
-                System.err.println("Commands: /init, /list-milvus, /insert-document <id>, /delete-document <id>, /search <query>, /exit");
+                System.err.println("Commands: /init, /list-milvus, /list-document, /insert-document <id>, /delete-document <id>, /search <query>, /exit");
                 break;
         }
         return true;

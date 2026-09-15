@@ -24,7 +24,8 @@ public class MilvusRetrievalAugmentor implements Supplier<RetrievalAugmentor> {
         EmbeddingStoreContentRetriever contentRetriever = EmbeddingStoreContentRetriever.builder()
                 .embeddingModel(model)
                 .embeddingStore(store)
-                .maxResults(3)
+                .maxResults(2)
+                .minScore(0.5)
                 .build();
         var contentInjector = DefaultContentInjector.builder()
                 .promptTemplate(PromptTemplate.from("""
@@ -58,7 +59,11 @@ public class MilvusRetrievalAugmentor implements Supplier<RetrievalAugmentor> {
             Log.debugf("Requested augmentation of %s", augmentationRequest.chatMessage());
             final var result = delegate.augment(augmentationRequest);
             Log.debugf("Augmentation retrieved %d contents", result.contents().size());
-            Log.debugf("Augmented message: %s", result.chatMessage());
+            for (var content : result.contents()) {
+                Log.debugf("  Content: %s", content.textSegment() != null
+                        ? content.textSegment().text().substring(0, Math.min(100, content.textSegment().text().length())) + "..."
+                        : "NULL");
+            }
             return result;
         }
     }
