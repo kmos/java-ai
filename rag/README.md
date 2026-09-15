@@ -6,12 +6,11 @@ This demo shows how Debezium Server could be used to implement RAG in an applica
 
 The application can add axirv documents for the RAG demo.
 Debezium Server will calculate embedding out of the downloaded paper using [FieldToEmbedding SMT](https://debezium.io/blog/2025/04/02/debezium-3-1-final-released/#new-features-and-improvements-ai) and store it in Milvus vector database.
-The `ollama` serverd LLM is started locally and the client application acts and interface to it while providing additional knowledge in prompt context obtained from Milvus database.
+The `llm cpp` serverd LLM is started locally and the client application acts and interface to it while providing additional knowledge in prompt context obtained from Milvus database.
 
 ## Steps to run demo
 
 For testing we will use paper named [IterQR: An Iterative Framework for LLM-based Query Rewrite in e-Commercial Search System](https://arxiv.org/abs/2504.05309) as `IterQR` word is not know by the model.
-The demo will run in three terminals
 
 ### Deployment start (Terminal 1)
 
@@ -23,9 +22,9 @@ $ docker-compose up --build`
 This will start up PostgreSQL, Milvus.
 Debezium Server image is extended with `debezium-ai-embeddings-openai` module and started.
 
-### Start LLM (Terminal 2)
+### Start  chat model (Terminal 2)
 
-Start your preferred LLM with your preferred engine. In this demo I'll use the granite 4.2 model in llama cpp
+Start your preferred LLM with your preferred engine. In this demo I'll use the granite 4.2 model in `llama cpp`
 
 ```
 $ llama-server -m ~/models/granite-4.2-3b-Q3_K_L.gguf --alias granite4.2 -ngl 99 --port 1144 -n 400 -e -sm layer --load-mode auto --reasoning-budget -1 --host 0.0.0.0
@@ -45,7 +44,15 @@ Iterative Quantized Ridge Regression (IterQR) is an efficient algorithm for larg
 that quantizes weights during iterations to reduce memory and computational demands, improving scalability.
 ```
 
-### RAG application (Terminal 3)
+### Start embedding model
+
+We should start an embedding models that is available for Debezium for transforming postgres text to vectors:
+
+```
+$ llama-server -m ~/models/granite-embedding-small-english-r2.Q8_0.gguf --alias granite -ngl 99 -n 400 -e -sm layer --load-mode auto --port 1145 --embeddings --host 0.0.0.0
+```
+
+### RAG application
 
 There is a Quarkus CLI available that uses RAG to extend LLM knowledge with new facts.
 
